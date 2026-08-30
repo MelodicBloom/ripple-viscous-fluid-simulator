@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Wake",
+      "hasCanvas": true,
+      "bodyTextLen": 132,
+      "bodyTextHash": "a87b47dca8ca206c5c8150d22c53d77c2575cca2107f8344a92e6279aa59dfee",
+      "bodyTextPrefix": "Wake Fluid surface Drag across the surface Viscosity 28 Wave str",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Wake",
+      "hasCanvas": true,
+      "bodyTextLen": 132,
+      "bodyTextHash": "a87b47dca8ca206c5c8150d22c53d77c2575cca2107f8344a92e6279aa59dfee",
+      "bodyTextPrefix": "Wake Fluid surface Drag across the surface Viscosity 28 Wave str",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
