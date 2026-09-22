@@ -1,0 +1,305 @@
+diff --git a/src/components/ripple/engine.ts b/src/components/ripple/engine.ts
+index 9699eaa..9f2a6c1 100644
+--- a/src/components/ripple/engine.ts
++++ b/src/components/ripple/engine.ts
+@@ -53,7 +53,7 @@ export const DEFAULT_PARAMS: RippleParams = {
+   area: 0.42,
+   thickness: 0.22,
+   density: 0.24,
+-  bubbles: 0.18,
++  bubbles: 0.12,
+   frequency: 0.62,
+   interference: 0.16,
+   lightAz: 0.18,
+@@ -164,8 +164,9 @@ const COLOR_INDEX: Record<ColorMapId, number> = {
+ };
+ 
+ const MAX_DROPS = 12;
++const MAX_VORTICES = 6;
+ const SIM_STEP = 1 / 60;
+-const MAX_STEPS = 2;
++const MAX_STEPS = 3;
+ const SIM_LONG = 640;
+ 
+ type Target = {
+@@ -244,10 +245,13 @@ void main() {
+   float avg = (n4 + 0.5 * n8) / 6.0;
+   vec3 film = texture(uFilm, vUv).rgb;
+   float mass = film.r * 0.55 + film.g * 0.45;
+-  float wave = (2.0 * avg - p);
+-  float drive = mix(0.28, 0.55, uFreq);
+-  float hNew = mix(h, wave, drive) * uDamping;
+-  hNew *= mix(1.0, 0.975, mass * uDensity);
++  float lap = avg - h;
++  float c2 = mix(0.52, 0.92, uFreq);
++  float hNew = (2.0 * h - p + lap * c2) * uDamping;
++  float edge = max(max(vUv.x, 1.0 - vUv.x), max(vUv.y, 1.0 - vUv.y));
++  float wall = smoothstep(0.93, 1.0, edge);
++  hNew *= mix(1.0, 0.9, wall);
++  hNew *= mix(1.0, 0.988, mass * uDensity);
+   hNew = clamp(hNew, -2.8, 2.8);
+   vec2 enc = encodePair(hNew, h);
+   fragColor = vec4(enc, 0.0, 1.0);
+@@ -286,8 +290,8 @@ void main() {
+       float ring = r / sig - 1.2;
+       add += amp * 1.15 * exp(-ring * ring * 7.0);
+     } else if (uMode == 2) {
+-      float ang = atan(d.y, d.x);
+-      add += amp * 1.05 * exp(-r2 * 0.7) * sin(ang * 2.0 + r / sig * 3.6);
++      add += amp * 0.72 * exp(-r2 * 0.85);
++      add += amp * 0.38 * exp(-r2) * (d.x + d.y) / max(sig, 0.001);
+     } else {
+       add += amp * exp(-r2);
+     }
+@@ -307,6 +311,8 @@ uniform float uAspect;
+ uniform float uDensity;
+ uniform float uVisc;
+ uniform float uBubble;
++uniform vec4 uVortex[6];
++uniform int uVortexCount;
+ out vec4 fragColor;
+ 
+ ${COMMON}
+@@ -319,8 +325,16 @@ void main() {
+   vec2 grad = vec2(hL - hR, hD - hU);
+   grad.x *= uAspect;
+   vec2 curl = vec2(-grad.y, grad.x);
+-  vec2 flow = grad * (0.05 + uDensity * 0.32) + curl * (0.09 + uDensity * 0.24);
+-  flow.y += uBubble * 0.008;
++  vec2 flow = grad * (0.04 + uDensity * 0.22) + curl * (0.07 + uDensity * 0.18);
++  for (int i = 0; i < 6; i++) {
++    if (i >= uVortexCount) break;
++    vec2 d = vUv - uVortex[i].xy;
++    d.x *= uAspect;
++    float rad = max(uVortex[i].w, 0.02);
++    float env = exp(-dot(d, d) / (rad * rad));
++    vec2 tang = vec2(-d.y, d.x);
++    flow += tang * uVortex[i].z * env * 2.4;
++  }
+ 
+   vec2 srcUv = clamp(vUv - flow * 0.28, 0.001, 0.999);
+   vec4 f = texture(uFilm, srcUv);
+@@ -348,9 +362,10 @@ void main() {
+   thick = clamp(thick, 0.0, 1.0);
+   pigment = clamp(pigment, 0.0, 1.0);
+ 
+-  float edge = abs(lap);
+-  float crest = max(decode(texture(uHeight, vUv)), 0.0);
+-  foam = foam * mix(0.993, 0.978, uBubble) + (edge * 0.7 + crest * 0.35) * uBubble * (0.32 + pigment) * 0.05;
++  float hNow = decode(texture(uHeight, vUv));
++  float thrash = length(grad) * 3.4 + max(-(hL + hR + hU + hD - 4.0 * hNow), 0.0) * 2.6 + max(hNow, 0.0);
++  foam += thrash * uBubble * (0.22 + pigment * 0.55) * 0.055;
++  foam *= mix(0.97, 0.945, uBubble);
+   foam = clamp(foam, 0.0, 1.0);
+ 
+   fragColor = vec4(pigment, thick, foam, 1.0);
+@@ -380,9 +395,8 @@ void main() {
+       float ring = r / sig - 1.15;
+       g = exp(-ring * ring * 6.5);
+     } else if (uMode == 2) {
+-      float ang = atan(d.y, d.x);
+-      float spiral = 0.5 + 0.5 * sin(ang * 4.0 + r / sig * 7.5);
+-      g *= 0.25 + spiral * 0.95;
++      // Soft disk of matter only. The vortex list orbits this disk.
++      g *= 0.85;
+     }
+     f.r = clamp(f.r + uMatter[i].x * g, 0.0, 1.0);
+     f.g = clamp(f.g + uMatter[i].y * g, 0.0, 1.0);
+@@ -550,8 +564,8 @@ vec3 airyFilm(float d, float cosI, float freq) {
+   vec3 R = sin(delta / lam);
+   R *= R;
+   float envelope = smoothstep(0.012, 0.09, d);
+-  vec3 black = vec3(0.08, 0.16, 0.2);
+-  return mix(black, pow(R, vec3(0.82)), envelope);
++  vec3 wet = vec3(0.12, 0.32, 0.38);
++  return mix(wet, pow(R, vec3(0.82)), envelope);
+ }
+ 
+ void main() {
+@@ -579,7 +593,7 @@ void main() {
+   float vein = length(fGrad);
+   float marbleAng = atan(fGrad.y, fGrad.x);
+ 
+-  vec3 n = normalize(vec3((hl - hr) * 12.0, 1.2, (hd - hu) * 12.0));
++  vec3 n = normalize(vec3((hl - hr) * 4.2, 2.2, (hd - hu) * 4.2));
+   float az = uLightAz * 6.283185;
+   float el = mix(0.12, 1.38, uLightEl);
+   vec3 light = normalize(vec3(cos(az) * cos(el), sin(el), sin(az) * cos(el)));
+@@ -592,11 +606,11 @@ void main() {
+   float fres = pow(clamp(1.0 - n.y, 0.0, 1.0), 1.7);
+   float ndv = max(dot(n, view), 0.04);
+ 
+-  float t = clamp(h * 1.15 + 0.5 + ndl * 0.14, 0.0, 1.0);
+-  float marbleT = fract(t + pigment * 0.62 + marbleAng * 0.08 + thick * 0.28);
++  float t = clamp(0.54 + h * 0.18 + ndl * 0.05, 0.28, 0.86);
++  float marbleT = clamp(t + pigment * 0.22 + marbleAng * 0.04 + thick * 0.12, 0.2, 0.95);
+   vec3 water = palette(uMap, t);
+   vec3 marble = palette(uMap, marbleT);
+-  vec3 albedo = mix(water, marble, clamp(pigment * (0.55 + uDensity * 0.5), 0.0, 0.92));
++  vec3 albedo = mix(water, marble, clamp(pigment * (0.4 + uDensity * 0.4), 0.0, 0.82));
+ 
+   float pathH = mix(h, hR, 0.5);
+   float h2 = sampleH(vUv + n.xz * (0.012 + uInterfere * 0.045));
+@@ -609,18 +623,17 @@ void main() {
+   float path = mix(0.12, 1.35, uThickness) * (0.18 + thick * 1.7 + abs(h) * 0.22 + pigment * 0.2);
+   float cosI = mix(ndv, ndl, 0.58);
+   vec3 filmCol = airyFilm(path, cosI, uFreq);
+-  float filmAmt = mix(0.04, 0.88, uThickness) * (thick * 1.15 + pigment * 0.9);
++  float filmAmt = mix(0.03, 0.62, uThickness) * (thick * 1.05 + pigment * 0.75);
+ 
+   vec3 specCol = mix(vec3(0.85, 0.93, 1.0), filmCol, 0.55);
+-  vec3 color = albedo * (0.48 + 0.62 * ndl);
+-  color += spec * specCol * mix(0.85, 1.7, 1.0 - uLightSoft);
+-  color += caustic * mix(albedo, specCol, 0.5) * 0.85;
+-  color += star * specCol * 0.7;
+-  color = mix(color, specCol, fres * 0.28);
++  vec3 color = albedo * (0.78 + 0.28 * ndl);
++  color += spec * specCol * mix(0.55, 1.35, 1.0 - uLightSoft);
++  color += caustic * mix(albedo, specCol, 0.45) * 1.15;
++  color += star * specCol * 0.55;
++  color = mix(color, specCol, fres * 0.18);
+ 
+-  vec3 transmitted = albedo * (1.0 - filmCol * 0.35);
+-  vec3 soap = mix(transmitted, filmCol * 1.55, 0.5) + filmCol * filmAmt;
+-  color = mix(color, soap, clamp(filmAmt, 0.0, 0.78));
++  vec3 soap = color * 0.62 + filmCol * 1.15;
++  color = mix(color, soap, clamp(filmAmt, 0.0, 0.55));
+ 
+   vec3 veinCol = mix(vec3(0.98, 0.78, 0.28), mix(filmCol, albedo, 0.25), 0.4);
+   color = mix(color, veinCol * 1.15, clamp(vein * (1.2 + uDensity * 2.4), 0.0, 0.7));
+@@ -631,7 +644,7 @@ void main() {
+   float cateye = pow(1.0 - clamp(band, 0.0, 1.0), mix(2.2, 7.5, 1.0 - uLightSoft));
+   vec3 chrome = mix(albedo * 0.32, env, 0.55 + fres * 0.4) + spec * vec3(0.96, 0.97, 1.0) * 1.55;
+   chrome += cateye * mix(vec3(0.35, 0.82, 1.0), vec3(1.0, 0.78, 0.28), pigment) * 0.9;
+-  color = mix(color, chrome, metal);
++  color = mix(color, chrome, metal * 0.72);
+ 
+   if (uInterfere > 0.02) {
+     vec3 split = vec3(
+@@ -663,16 +676,16 @@ void main() {
+     }
+   }
+   float inside = 1.0 - smoothstep(0.82, 1.02, dmin);
+-  float live = inside * (0.18 + foam * 1.05) * mix(0.12, 1.0, uBubbles);
++  float live = inside * smoothstep(0.16, 0.52, foam) * uBubbles;
+   vec3 bN = vec3(bOff / max(bRad, 0.08), sqrt(max(0.0, 1.0 - dmin * dmin)));
+   bN = normalize(bN + vec3(0.0, 0.0, 0.001));
+   float bNdv = max(bN.z, 0.04);
+   float bSpec = pow(clamp(dot(bN, light), 0.0, 1.0), 42.0);
+   float bRim = pow(1.0 - bNdv, 1.6);
+   vec3 bFilm = airyFilm(0.22 + (1.0 - bNdv) * 0.7, bNdv, 0.8);
+-  vec3 bCol = mix(vec3(0.08, 0.1, 0.14), bFilm * 1.6, 0.72) + vec3(0.95, 0.97, 1.0) * bSpec * 1.8;
++  vec3 bCol = mix(albedo, bFilm * 1.45, 0.72) + vec3(0.95, 0.97, 1.0) * bSpec * 1.8;
+   bCol += bRim * mix(vec3(0.75, 0.9, 1.0), filmCol, 0.5) * 0.9;
+-  color = mix(color * mix(1.0, 0.45, live * 0.7), bCol, clamp(live, 0.0, 0.92));
++  color = mix(color, bCol, clamp(live, 0.0, 0.88));
+ 
+   float foamCap = smoothstep(0.16, 0.34, h) * (0.28 + foam);
+   color = mix(color, mix(vec3(0.94, 0.97, 1.0), filmCol, 0.25), foamCap * 0.32);
+@@ -681,7 +694,7 @@ void main() {
+   color += spark * spec * specCol * (0.16 + uThickness * 0.4);
+ 
+   float breath = 0.97 + 0.03 * sin(uTime * 0.62);
+-  color *= mix(0.82, 1.32, uLightInt) * breath;
++  color *= mix(0.92, 1.28, uLightInt) * breath;
+   float vig = 1.0 - 0.26 * dot(vUv - 0.5, vUv - 0.5);
+   color *= vig;
+   color += (hash(gl_FragCoord.xy) - 0.5) * 0.025;
+@@ -801,6 +814,7 @@ export class RippleEngine {
+   private vao!: WebGLVertexArrayObject;
+   private params: RippleParams;
+   private drops: Drop[] = [];
++  private vortices: { x: number; y: number; k: number; rad: number; life: number }[] = [];
+   private pointers = new Map<number, PointerStroke>();
+   private raf = 0;
+   private acc = 0;
+@@ -893,6 +907,12 @@ export class RippleEngine {
+     }
+     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+     this.drops.length = 0;
++    this.vortices.length = 0;
++  }
++
++  private ageVortices(dt: number) {
++    for (const v of this.vortices) v.life -= dt * 0.38;
++    this.vortices = this.vortices.filter((v) => v.life > 0.02);
+   }
+ 
+   start() {
+@@ -1160,7 +1180,7 @@ export class RippleEngine {
+ 
+   private dropAmp(impulse: number): number {
+     const s = clamp(this.params.strength, 0, 1);
+-    return (0.03 + s * 0.26) * impulse;
++    return (0.09 + s * 0.46) * impulse;
+   }
+ 
+   private dropRadius(): number {
+@@ -1196,7 +1216,29 @@ export class RippleEngine {
+     const thick = paint ? thickness * (0.42 + Math.abs(amp) * 0.9) : thickness * 0.06;
+     let foam = paint ? bubbles * (0.28 + Math.abs(amp) * 0.7) : bubbles * 0.05;
+     const m = mode ?? (paint ? this.currentMode() : 0);
+-    if (m === 2) foam *= 1.35;
++    if (m === 2) {
++      foam *= 1.35;
++      const nx = clamp(x, 0, 1);
++      const ny = clamp(y, 0, 1);
++      const addK = (amp >= 0 ? 1 : -1) * (0.28 + Math.abs(amp) * 1.8);
++      const near = this.vortices.find((v) => Math.hypot(v.x - nx, v.y - ny) < 0.09);
++      if (near) {
++        near.k = near.k * 0.65 + addK * 0.55;
++        near.life = Math.min(1, near.life + 0.4);
++        near.rad = Math.max(near.rad, radius * 3.4);
++        near.x = near.x * 0.7 + nx * 0.3;
++        near.y = near.y * 0.7 + ny * 0.3;
++      } else {
++        this.vortices.unshift({
++          x: nx,
++          y: ny,
++          k: addK,
++          rad: Math.max(radius * 3.4, 0.06),
++          life: 1,
++        });
++        if (this.vortices.length > MAX_VORTICES) this.vortices.length = MAX_VORTICES;
++      }
++    }
+     this.drops.push({
+       x: clamp(x, 0, 1),
+       y: clamp(y, 0, 1),
+@@ -1230,6 +1272,7 @@ export class RippleEngine {
+     this.time += this.reducedMotion ? 0 : dt;
+     this.applyHeldKeys(dt);
+     this.flushDrops();
++    this.ageVortices(dt);
+     this.acc += dt;
+     let steps = 0;
+     while (this.acc >= SIM_STEP && steps < MAX_STEPS) {
+@@ -1243,8 +1286,7 @@ export class RippleEngine {
+ 
+   private damping(): number {
+     const v = clamp(this.params.viscosity, 0, 1);
+-    const t = v ** 0.9;
+-    return 0.996 - t * 0.088;
++    return 0.9982 - v * 0.012;
+   }
+ 
+   private simStep() {
+@@ -1285,6 +1327,18 @@ export class RippleEngine {
+     gl.uniform1f(gl.getUniformLocation(prog, "uDensity"), clamp(this.params.density, 0, 1));
+     gl.uniform1f(gl.getUniformLocation(prog, "uVisc"), clamp(this.params.viscosity, 0, 1));
+     gl.uniform1f(gl.getUniformLocation(prog, "uBubble"), clamp(this.params.bubbles, 0, 1));
++    const vdata = new Float32Array(MAX_VORTICES * 4);
++    const n = Math.min(this.vortices.length, MAX_VORTICES);
++    for (let i = 0; i < n; i++) {
++      const v = this.vortices[i];
++      vdata[i * 4] = v.x;
++      vdata[i * 4 + 1] = v.y;
++      vdata[i * 4 + 2] = v.k * Math.max(v.life, 0);
++      vdata[i * 4 + 3] = v.rad;
++    }
++    gl.uniform1i(gl.getUniformLocation(prog, "uVortexCount"), n);
++    const vloc = gl.getUniformLocation(prog, "uVortex[0]");
++    if (vloc) gl.uniform4fv(vloc, vdata);
+     gl.bindVertexArray(this.vao);
+     gl.drawArrays(gl.TRIANGLES, 0, 3);
+     this.swapFilm();

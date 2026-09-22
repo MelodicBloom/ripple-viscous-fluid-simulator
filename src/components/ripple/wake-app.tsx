@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Droplets, RotateCcw, Waves, CircleDot, Tornado } from "lucide-react";
+import { Droplets, RotateCcw, Waves, CircleDot, Tornado, Undo2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   COLOR_MAPS,
@@ -14,8 +14,8 @@ import {
   type WaveModeId,
 } from "./engine";
 
-const STORAGE_KEY = "wake.v3";
-const LEGACY_KEYS = ["wake.v2", "wake.v1"];
+const STORAGE_KEY = "wake.v4";
+const LEGACY_KEYS = ["wake.v3", "wake.v2", "wake.v1"];
 
 const PARAM_KEYS = [
   "viscosity",
@@ -193,6 +193,14 @@ export function WakeApp() {
     setHint(true);
   }, []);
 
+  const undo = useCallback(() => {
+    engineRef.current?.undo();
+  }, []);
+
+  const freeze = useCallback(() => {
+    void engineRef.current?.exportPng();
+  }, []);
+
   const recipe = activeRecipe(params);
 
   return (
@@ -226,7 +234,7 @@ export function WakeApp() {
 
       {hint && !error && (
         <p className="pointer-events-none absolute top-1/4 left-1/2 z-10 max-w-sm -translate-x-1/2 px-6 text-center font-display text-lg tracking-tight text-fg/80 italic md:text-xl">
-          Drag to paint · Space pulse · R ring · V swirl
+          Drag to paint · Space pulse · R ring · V swirl · Z undo · F freeze
         </p>
       )}
 
@@ -446,19 +454,47 @@ export function WakeApp() {
               </>
             )}
 
-            <button
-              type="button"
-              onClick={clear}
-              className={cn(
-                "flex h-11 w-full items-center justify-center gap-2 rounded-sm",
-                "bg-surface-2 text-sm font-medium text-fg shadow-border",
-                "transition-[background-color,transform] duration-150 ease-out",
-                "hover:bg-surface-2/80 active:scale-[0.96]",
-              )}
-            >
-              <RotateCcw className="size-4" strokeWidth={1.75} aria-hidden="true" />
-              Clear surface
-            </button>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={undo}
+                className={cn(
+                  "flex h-11 items-center justify-center gap-1.5 rounded-sm",
+                  "bg-surface-2 text-sm font-medium text-fg",
+                  "transition-[background-color,transform] duration-150 ease-out",
+                  "hover:bg-surface-2/80 active:scale-[0.96]",
+                )}
+              >
+                <Undo2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Undo
+              </button>
+              <button
+                type="button"
+                onClick={freeze}
+                className={cn(
+                  "flex h-11 items-center justify-center gap-1.5 rounded-sm",
+                  "bg-surface-2 text-sm font-medium text-fg",
+                  "transition-[background-color,transform] duration-150 ease-out",
+                  "hover:bg-surface-2/80 active:scale-[0.96]",
+                )}
+              >
+                <Download className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Freeze
+              </button>
+              <button
+                type="button"
+                onClick={clear}
+                className={cn(
+                  "flex h-11 items-center justify-center gap-1.5 rounded-sm",
+                  "bg-surface-2 text-sm font-medium text-fg",
+                  "transition-[background-color,transform] duration-150 ease-out",
+                  "hover:bg-surface-2/80 active:scale-[0.96]",
+                )}
+              >
+                <RotateCcw className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                Clear
+              </button>
+            </div>
           </div>
         </div>
       </aside>
