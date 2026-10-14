@@ -870,16 +870,23 @@ export class RippleEngine {
     this.params = { ...DEFAULT_PARAMS, ...params };
     this.onParams = opts?.onParams;
     this.tier = classifyTier();
-    const gl = canvas.getContext("webgl2", {
+    const base: WebGLContextAttributes = {
       alpha: false,
       antialias: false,
       depth: false,
       stencil: false,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
-      powerPreference: "high-performance",
-    });
-    if (!gl) throw new Error("WebGL2 is required for Wake.");
+    };
+    const gl =
+      canvas.getContext("webgl2", { ...base, powerPreference: "high-performance" }) ??
+      canvas.getContext("webgl2", base) ??
+      canvas.getContext("webgl2");
+    if (!gl) {
+      throw new Error(
+        "Couldn't open a graphics surface. Edge includes WebGL2 — this usually means hardware acceleration is off, the GPU is blocked, or too many WebGL tabs are open. Check edge://gpu.",
+      );
+    }
     this.gl = gl;
 
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1030,6 +1037,7 @@ export class RippleEngine {
     this.undoH = [];
     this.undoF = [];
     gl.deleteVertexArray(this.vao);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
     if (window.__wake) delete window.__wake;
   }
 

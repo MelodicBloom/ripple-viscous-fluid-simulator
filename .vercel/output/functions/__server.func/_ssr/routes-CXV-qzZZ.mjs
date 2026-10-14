@@ -1,9 +1,9 @@
 import { i as __toESM } from "../_runtime.mjs";
-import { L as require_react, v as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
+import { K as require_react, b as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as RotateCcw, c as CircleDot, i as Tornado, n as Undo2, o as Droplets, s as Download, t as Waves } from "../_libs/lucide-react.mjs";
 import { t as clsx } from "../_libs/clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-BNC5JPU-.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-CXV-qzZZ.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -892,16 +892,19 @@ var RippleEngine = class {
 		};
 		this.onParams = opts?.onParams;
 		this.tier = classifyTier();
-		const gl = canvas.getContext("webgl2", {
+		const base = {
 			alpha: false,
 			antialias: false,
 			depth: false,
 			stencil: false,
 			premultipliedAlpha: false,
-			preserveDrawingBuffer: false,
+			preserveDrawingBuffer: false
+		};
+		const gl = canvas.getContext("webgl2", {
+			...base,
 			powerPreference: "high-performance"
-		});
-		if (!gl) throw new Error("WebGL2 is required for Wake.");
+		}) ?? canvas.getContext("webgl2", base) ?? canvas.getContext("webgl2");
+		if (!gl) throw new Error("Couldn't open a graphics surface. Edge includes WebGL2 — this usually means hardware acceleration is off, the GPU is blocked, or too many WebGL tabs are open. Check edge://gpu.");
 		this.gl = gl;
 		this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		this.onLost = (e) => {
@@ -1041,6 +1044,7 @@ var RippleEngine = class {
 		this.undoH = [];
 		this.undoF = [];
 		gl.deleteVertexArray(this.vao);
+		gl.getExtension("WEBGL_lose_context")?.loseContext();
 		if (window.__wake) delete window.__wake;
 	}
 	listen(target, type, fn, opts) {
